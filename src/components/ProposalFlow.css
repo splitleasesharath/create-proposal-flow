@@ -36,7 +36,7 @@
 .proposal-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   padding: 18px 24px;
   border-bottom: 1px solid #e0e0e0;
   position: relative;
@@ -66,7 +66,7 @@
   color: #666;
   transition: color 0.2s;
   position: absolute;
-  left: 20px;
+  left: 24px;
   font-weight: 500;
 }
 

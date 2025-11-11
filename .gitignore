@@ -38,6 +38,9 @@ Thumbs.db
 # Playwright
 .playwright-mcp/
 
+# Context/Documentation Dump
+Dump/
+
 # Temp files
 nul
 .task-context.md

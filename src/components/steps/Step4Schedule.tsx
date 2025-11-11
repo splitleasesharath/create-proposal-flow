@@ -19,7 +19,7 @@ export const Step4Schedule: React.FC<Step4ScheduleProps> = ({ listing }) => {
   const { scheduleInfo, dateInfo, updateScheduleInfo, calculatePricing } = useProposalFlowStore();
   const [selectedDaysOfWeek, setSelectedDaysOfWeek] = useState<DayOfWeek[]>(scheduleInfo.daysOfWeekSelected);
 
-  const daysOfWeek: DayOfWeek[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const daysOfWeek: DayOfWeek[] = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   // Handle day of week selection
   const toggleDayOfWeek = (day: DayOfWeek) => {
