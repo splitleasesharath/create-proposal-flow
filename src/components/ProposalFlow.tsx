@@ -15,6 +15,14 @@ import { Step5Confirmation } from './steps/Step5Confirmation';
 import { toast } from 'react-toastify';
 import './ProposalFlow.css';
 
+interface InitialData {
+  moveInDate?: Date;
+  reservationWeeks?: number;
+  selectedDays?: string[];
+  nightsPerWeek?: number;
+  totalNights?: number;
+}
+
 interface ProposalFlowProps {
   userId: string;
   listingId: string;
@@ -23,6 +31,7 @@ interface ProposalFlowProps {
   onClose: () => void;
   onSuccess?: (proposal: Proposal) => void;
   enableChatGPT?: boolean;
+  initialData?: InitialData;
 }
 
 export const ProposalFlow: React.FC<ProposalFlowProps> = ({
@@ -33,6 +42,7 @@ export const ProposalFlow: React.FC<ProposalFlowProps> = ({
   onClose,
   onSuccess,
   enableChatGPT = false,
+  initialData,
 }) => {
   const {
     step,
@@ -65,6 +75,31 @@ export const ProposalFlow: React.FC<ProposalFlowProps> = ({
     }
   }, [user]);
 
+  // Initialize with pre-filled reservation data
+  useEffect(() => {
+    if (initialData) {
+      if (initialData.moveInDate) {
+        updateDateInfo({
+          moveInDate: initialData.moveInDate,
+          weeksNumber: initialData.reservationWeeks || 0,
+        });
+      }
+      if (initialData.selectedDays && initialData.nightsPerWeek) {
+        updateScheduleInfo({
+          daysOfWeekSelected: initialData.selectedDays,
+          nightsNumber: initialData.totalNights || 0,
+          weeksNumber: initialData.reservationWeeks || 0,
+          nightsConfirmed: true,
+          checkoutConfirmed: true,
+        });
+      }
+      // Calculate pricing with initial data
+      if (initialData.totalNights) {
+        calculatePricing(listing, initialData.totalNights);
+      }
+    }
+  }, [initialData]);
+
   // Validate current step before proceeding
   const validateCurrentStep = (): boolean => {
     clearValidationErrors();
@@ -81,6 +116,36 @@ export const ProposalFlow: React.FC<ProposalFlowProps> = ({
         }
         if (userInfo.hasSpecialNeeds && !userInfo.specialNeeds.trim()) {
           errors.push({ field: 'specialNeeds', message: 'Please describe your special needs', type: 'error' as const });
+        }
+
+        if (errors.length > 0) {
+          errors.forEach(err => toast.error(err.message));
+          return false;
+        }
+        return true;
+      }
+
+      case 2: {
+        // Validate review step before submission
+        const errors = [];
+
+        if (!userInfo.needForSpace.trim()) {
+          errors.push({ field: 'needForSpace', message: 'Please tell us why you want this space', type: 'error' as const });
+        }
+        if (!userInfo.aboutMe.trim()) {
+          errors.push({ field: 'aboutMe', message: 'Please tell us about yourself', type: 'error' as const });
+        }
+        if (!dateInfo.moveInDate) {
+          errors.push({ field: 'moveInDate', message: 'Please select a move-in date', type: 'error' as const });
+        }
+        if (dateInfo.weeksNumber === 0) {
+          errors.push({ field: 'weeksNumber', message: 'Please select a reservation length', type: 'error' as const });
+        }
+        if (scheduleInfo.daysOfWeekSelected.length === 0) {
+          errors.push({ field: 'schedule', message: 'Please select at least one day of the week', type: 'error' as const });
+        }
+        if (!scheduleInfo.nightsConfirmed || !scheduleInfo.checkoutConfirmed) {
+          errors.push({ field: 'confirmation', message: 'Please confirm your night selection and checkout day', type: 'error' as const });
         }
 
         if (errors.length > 0) {
@@ -142,15 +207,24 @@ export const ProposalFlow: React.FC<ProposalFlowProps> = ({
   // Handle navigation
   const handleNext = () => {
     if (validateCurrentStep()) {
-      // Navigate based on current step (non-linear flow)
+      // Review (Step 2) is the central hub
       if (step === 1) {
-        setStep(3); // Go to date/time selection
+        // After user info, always go to review if data exists, otherwise go to date selection first
+        if (initialData && initialData.moveInDate && initialData.selectedDays) {
+          setStep(2); // Go to review with pre-filled data
+        } else {
+          setStep(3); // Go to date/move-in selection for first-time flow
+        }
       } else if (step === 3) {
-        setStep(4); // Go to schedule
+        // After editing dates, go to schedule selector
+        setStep(4);
       } else if (step === 4) {
-        setStep(2); // Go to breakdown/review
+        // After editing schedule, ALWAYS return to Review
+        setStep(2);
       } else if (step === 2) {
-        setStep(5); // Go to final confirmation
+        // From Review, submit the proposal
+        handleSubmit();
+        return;
       } else {
         setStep(step + 1);
       }
@@ -161,27 +235,18 @@ export const ProposalFlow: React.FC<ProposalFlowProps> = ({
   };
 
   const handleBack = () => {
-    // Non-linear back navigation
-    const backStepMap: Record<number, number> = {
-      5: 2,
-      4: 3,
-      3: 1,
-      2: 1,
-    };
-
-    const previousStep = backStepMap[step] || step - 1;
-
-    // Reset schedule data if going back from step 3
-    if (step === 3) {
-      updateScheduleInfo({
-        selectedDays: [],
-        nightsNumber: 0,
-        nightsConfirmed: false,
-        checkoutConfirmed: false,
-      });
+    // Back button always returns to Review (Step 2) when editing, or to Step 1 from Review
+    if (step === 3 || step === 4) {
+      // From any edit screen, go back to Review
+      setStep(2);
+    } else if (step === 2) {
+      // From Review, go back to User Info
+      setStep(1);
+    } else {
+      // Default fallback
+      setStep(Math.max(1, step - 1));
     }
 
-    setStep(previousStep);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -267,14 +332,13 @@ export const ProposalFlow: React.FC<ProposalFlowProps> = ({
         {/* Step Indicator */}
         <div className="step-indicator">
           <div className="step-progress">
-            <div className={`progress-bar progress-step-${step}`}></div>
+            <div className={`progress-bar progress-step-${step > 4 ? 4 : step}`}></div>
           </div>
           <div className="step-labels">
             <span className={step >= 1 ? 'active' : ''}>Info</span>
             <span className={step >= 2 ? 'active' : ''}>Review</span>
-            <span className={step >= 3 ? 'active' : ''}>Dates</span>
-            <span className={step >= 4 ? 'active' : ''}>Schedule</span>
-            <span className={step >= 5 ? 'active' : ''}>Confirm</span>
+            <span className={step === 3 ? 'active' : ''}>Dates</span>
+            <span className={step === 4 ? 'active' : ''}>Schedule</span>
           </div>
         </div>
 
@@ -291,29 +355,21 @@ export const ProposalFlow: React.FC<ProposalFlowProps> = ({
           )}
           {step === 3 && <Step3DateTime listing={listing} />}
           {step === 4 && <Step4Schedule listing={listing} />}
-          {step === 5 && <Step5Confirmation />}
         </div>
 
         {/* Footer with navigation */}
         <div className="proposal-footer">
           <div className="footer-actions">
-            {step < 5 ? (
-              <button
-                className="btn btn-primary btn-next"
-                onClick={handleNext}
-                disabled={ui.isSubmitting}
-              >
-                Next →
-              </button>
-            ) : (
-              <button
-                className="btn btn-primary btn-submit"
-                onClick={handleSubmit}
-                disabled={ui.isSubmitting}
-              >
-                {ui.isSubmitting ? 'Submitting...' : 'Submit Proposal'}
-              </button>
-            )}
+            <button
+              className={`btn btn-primary ${step === 2 ? 'btn-submit' : 'btn-next'}`}
+              onClick={handleNext}
+              disabled={ui.isSubmitting}
+            >
+              {step === 2
+                ? (ui.isSubmitting ? 'Submitting...' : 'Submit Proposal')
+                : 'Next →'
+              }
+            </button>
           </div>
         </div>
 
